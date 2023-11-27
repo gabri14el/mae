@@ -1,0 +1,40 @@
+python main_pretrain.py --batch_size 32 \
+--epochs 3000 \
+--model mae_vit_base_patch16 \
+--mask_ratio 0.60 \
+--warmup_epochs 30 \
+--data_path /media/gabriel/BA1041B410417881/Users/gabrielc/Datasets/all_plus_utad \
+--blr 1.5e-4 --weight_decay 0.05 \
+--num_workers 1 \
+--world_size 1 \
+--resume output_dir/checkpoint-999.pth \
+--start_epoch 1000
+
+
+
+python main_pretrain.py --batch_size 192 \
+--epochs 500 \
+--model mae_vit_tiny_patch16 \
+--mask_ratio 0.60 \
+--warmup_epochs 10 \
+--data_path /media/gabriel/BA1041B410417881/Users/gabrielc/Datasets/all_plus_utad \
+--blr 1.5e-4 --weight_decay 0.05 \
+--num_workers 1 \
+--world_size 1 \
+--output output_pre_train_tiny \
+--log output_pre_train_tiny \
+--start_epoch 0
+
+python main_finetune.py \
+--batch_size 196 \
+--model vit_tiny_patch16 \
+--finetune /home/gabriel/Projects/mae-main/output_pre_train_tiny/checkpoint-499.pth \
+--epochs 100 \
+--blr 1e-3 --layer_decay 0.65 \
+--weight_decay 0.05 --drop_path 0.1 --reprob 0.25 --mixup 0.8 --cutmix 1.0 \
+--warmup_epochs 10 \
+--dist_eval --data_path /home/gabriel/Downloads/castas-huge2-split \
+--output_dir ./output_ft_tiny \
+--nb_classes 43 \
+--num_workers 1 \
+--log ./output_ft_tiny

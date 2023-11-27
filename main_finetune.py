@@ -16,6 +16,7 @@ import numpy as np
 import os
 import time
 from pathlib import Path
+import mlflow
 
 import torch
 import torch.backends.cudnn as cudnn
@@ -37,7 +38,9 @@ from util.misc import NativeScalerWithGradNormCount as NativeScaler
 import models_vit
 
 from engine_finetune import train_one_epoch, evaluate
-
+import utils
+import matplotlib.pyplot as plt
+comments = ''
 
 def get_args_parser():
     parser = argparse.ArgumentParser('MAE fine-tuning for image classification', add_help=False)
@@ -172,6 +175,7 @@ def main(args):
 
     dataset_train = build_dataset(is_train=True, args=args)
     dataset_val = build_dataset(is_train=False, args=args)
+    dataset_test = build_dataset(is_train=False, args=args, folder='test')
 
     if True:  # args.distributed:
         num_tasks = misc.get_world_size()
@@ -186,9 +190,14 @@ def main(args):
                       'This will slightly alter validation results as extra duplicate entries are added to achieve '
                       'equal num of samples per-process.')
             sampler_val = torch.utils.data.DistributedSampler(
-                dataset_val, num_replicas=num_tasks, rank=global_rank, shuffle=True)  # shuffle=True to reduce monitor bias
+                dataset_val, num_replicas=num_tasks, rank=global_rank, shuffle=True) 
+            
+            sampler_test = torch.utils.data.DistributedSampler(
+                dataset_test, num_replicas=num_tasks, rank=global_rank, shuffle=True)
+             # shuffle=True to reduce monitor bias
         else:
             sampler_val = torch.utils.data.SequentialSampler(dataset_val)
+            sampler_test = torch.utils.data.SequentialSampler(dataset_test)
     else:
         sampler_train = torch.utils.data.RandomSampler(dataset_train)
         sampler_val = torch.utils.data.SequentialSampler(dataset_val)
@@ -209,6 +218,14 @@ def main(args):
 
     data_loader_val = torch.utils.data.DataLoader(
         dataset_val, sampler=sampler_val,
+        batch_size=args.batch_size,
+        num_workers=args.num_workers,
+        pin_memory=args.pin_mem,
+        drop_last=False
+    )
+
+    data_loader_test = torch.utils.data.DataLoader(
+        dataset_test, sampler=sampler_test,
         batch_size=args.batch_size,
         num_workers=args.num_workers,
         pin_memory=args.pin_mem,
@@ -241,20 +258,28 @@ def main(args):
                 print(f"Removing key {k} from pretrained checkpoint")
                 del checkpoint_model[k]
 
+        print(model.head)
+       
         # interpolate position embedding
         interpolate_pos_embed(model, checkpoint_model)
 
+        print(model.head)
         # load pre-trained model
         msg = model.load_state_dict(checkpoint_model, strict=False)
+
         print(msg)
+       
 
         if args.global_pool:
             assert set(msg.missing_keys) == {'head.weight', 'head.bias', 'fc_norm.weight', 'fc_norm.bias'}
         else:
             assert set(msg.missing_keys) == {'head.weight', 'head.bias'}
 
+        
         # manually initialize fc layer
         trunc_normal_(model.head.weight, std=2e-5)
+
+        print(model.head)
 
     model.to(device)
 
@@ -307,6 +332,11 @@ def main(args):
     print(f"Start training for {args.epochs} epochs")
     start_time = time.time()
     max_accuracy = 0.0
+    
+    
+    classes = list(dataset_test.class_to_idx.keys())
+    print(classes)
+    mlflow.start_run()
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed:
             data_loader_train.sampler.set_epoch(epoch)
@@ -317,12 +347,15 @@ def main(args):
             log_writer=log_writer,
             args=args
         )
-        if args.output_dir:
-            misc.save_model(
-                args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
-                loss_scaler=loss_scaler, epoch=epoch)
 
         test_stats = evaluate(data_loader_val, model, device)
+        
+        if args.output_dir:
+            if test_stats['acc1'] > max_accuracy:
+                misc.save_model(
+                    args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
+                    loss_scaler=loss_scaler, epoch=epoch, save_best=True)
+            
         print(f"Accuracy of the network on the {len(dataset_val)} test images: {test_stats['acc1']:.1f}%")
         max_accuracy = max(max_accuracy, test_stats["acc1"])
         print(f'Max accuracy: {max_accuracy:.2f}%')
@@ -346,6 +379,25 @@ def main(args):
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
     print('Training time {}'.format(total_time_str))
+    
+    path_weight_ft = os.path.join(args.output_dir, 'checkpoint.pth')
+    model.load_state_dict(torch.load(path_weight_ft,  map_location=torch.device('cpu'))['model'], strict=False)
+
+    classes_alias = {'tinto cao': 'TC', 'tinta francisca': 'TF', 'alicante': 'AC', 'alveralhao': 'AV', 'arinto': 'AT', 'bastardo': 'BT', 'boal': 'BA', 'cabernet franc': 'CF', 'cabernet sauvignon': 'CS', 'carignon noir': 'CN', 'cercial': 'CC', 'chardonnay': 'CD', 'codega': 'CG', 'codega do larinho': 'CR', 'cornifesto': 'CT', 'donzelinho': 'DZ', 'donzelinho branco': 'DB', 'donzelinho tinto': 'DT', 'esgana cao': 'EC', 'fernao pires': 'FP', 'folgasao': 'FG', 'gamay': 'GM', 'gouveio': 'GV', 'malvasia corada': 'MC', 'malvasia fina': 'MF', 'malvasia preta': 'MP', 'malvasia rei': 'MR', 'merlot': 'ML', 'moscatel galego': 'MG', 'moscatel galego roxo': 'MX', 'mourisco tinto': 'MT', 'pinot blanc': 'PB', 'rabigato': 'RB', 'rufete': 'RF', 'samarrinho': 'SM', 'sauvignon blanc': 'SB', 'sousao': 'SS', 'tinta amarela': 'TA', 'tinta barroca': 'TB', 'tinta femea': 'TM', 'tinta roriz': 'TR', 'touriga francesa': 'TS', 'touriga nacional': 'TN', 'viosinho': 'VO'}
+    report = utils.confusion_matrix(data_loader_test, model, class_labels=[classes_alias[c.lower()] for c in classes],mode='pytorch', sns=True, normalize=True)
+    
+    mlflow.set_experiment('MAE-finetune')
+    mlflow.log_param("batch_size", args.batch_size)
+    mlflow.log_param("dim", args.input_size)
+    mlflow.log_param("dataset", args.data_path)
+    mlflow.log_param("optimizer", 'AdamW')
+    mlflow.log_param("lr", args.lr)
+    mlflow.log_artifact(path_weight_ft)
+    mlflow.log_text(report, F"cm.txt")
+    mlflow.log_figure(plt.gcf(), 'cm.png')
+    mlflow.log_param("loss", 'cross_entropy')
+    mlflow.log_param("comments", comments or '')
+    mlflow.end_run()
 
 
 if __name__ == '__main__':
