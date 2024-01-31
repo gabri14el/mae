@@ -336,7 +336,7 @@ def main(args):
     
     classes = list(dataset_test.class_to_idx.keys())
     print(classes)
-    mlflow.start_run()
+    mlflow.start_run(run_name=args.finetune.split('/')[-2])
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed:
             data_loader_train.sampler.set_epoch(epoch)

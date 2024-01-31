@@ -1,0 +1,4 @@
+output/
+mlruns/
+output_epochs/
+output_pre_train_tiny/
