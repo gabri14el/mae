@@ -84,6 +84,7 @@ def get_args_parser():
     parser.add_argument('--seed', default=0, type=int)
     parser.add_argument('--resume', default='',
                         help='resume from checkpoint')
+    parser.add_argument('--checkpoint_encoder', default=None, type=str)
 
     parser.add_argument('--start_epoch', default=0, type=int, metavar='N',
                         help='start epoch')
@@ -152,9 +153,13 @@ def main(args):
         drop_last=True,
     )
     
-    # define the model
-    model = models_mae.__dict__[args.model](norm_pix_loss=args.norm_pix_loss)
-
+    
+    if args.checkpoint_encoder:
+        model = models_mae.__dict__[args.model](norm_pix_loss=args.norm_pix_loss, encoder_state_dict=args.checkpoint_encoder)
+    else:
+        model = models_mae.__dict__[args.model](norm_pix_loss=args.norm_pix_loss)
+    
+    print(model)
     model.to(device)
 
     model_without_ddp = model

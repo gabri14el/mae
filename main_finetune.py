@@ -154,7 +154,10 @@ def get_args_parser():
     parser.add_argument('--dist_on_itp', action='store_true')
     parser.add_argument('--dist_url', default='env://',
                         help='url used to set up distributed training')
-
+    
+    parser.add_argument('--experiment_name', default=None,
+                        help='finetune from checkpoint')
+    
     return parser
 
 
@@ -336,7 +339,11 @@ def main(args):
     
     classes = list(dataset_test.class_to_idx.keys())
     print(classes)
-    mlflow.start_run(run_name=args.finetune.split('/')[-2])
+    if args.experiment_name:
+        mlflow.set_experiment(args.experiment_name)
+    
+    run_name = args.model.split('_')[-2]+'_'+args.finetune.split('/')[-1].split('.')[0].split('-')[-1]
+    mlflow.start_run(run_name=run_name)
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed:
             data_loader_train.sampler.set_epoch(epoch)
@@ -386,7 +393,6 @@ def main(args):
     classes_alias = {'tinto cao': 'TC', 'tinta francisca': 'TF', 'alicante': 'AC', 'alveralhao': 'AV', 'arinto': 'AT', 'bastardo': 'BT', 'boal': 'BA', 'cabernet franc': 'CF', 'cabernet sauvignon': 'CS', 'carignon noir': 'CN', 'cercial': 'CC', 'chardonnay': 'CD', 'codega': 'CG', 'codega do larinho': 'CR', 'cornifesto': 'CT', 'donzelinho': 'DZ', 'donzelinho branco': 'DB', 'donzelinho tinto': 'DT', 'esgana cao': 'EC', 'fernao pires': 'FP', 'folgasao': 'FG', 'gamay': 'GM', 'gouveio': 'GV', 'malvasia corada': 'MC', 'malvasia fina': 'MF', 'malvasia preta': 'MP', 'malvasia rei': 'MR', 'merlot': 'ML', 'moscatel galego': 'MG', 'moscatel galego roxo': 'MX', 'mourisco tinto': 'MT', 'pinot blanc': 'PB', 'rabigato': 'RB', 'rufete': 'RF', 'samarrinho': 'SM', 'sauvignon blanc': 'SB', 'sousao': 'SS', 'tinta amarela': 'TA', 'tinta barroca': 'TB', 'tinta femea': 'TM', 'tinta roriz': 'TR', 'touriga francesa': 'TS', 'touriga nacional': 'TN', 'viosinho': 'VO'}
     report = utils.confusion_matrix(data_loader_test, model, class_labels=[classes_alias[c.lower()] for c in classes],mode='pytorch', sns=True, normalize=True)
     
-    mlflow.set_experiment('MAE-finetune')
     mlflow.log_param("batch_size", args.batch_size)
     mlflow.log_param("dim", args.input_size)
     mlflow.log_param("dataset", args.data_path)

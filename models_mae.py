@@ -25,7 +25,7 @@ class MaskedAutoencoderViT(nn.Module):
     def __init__(self, img_size=224, patch_size=16, in_chans=3,
                  embed_dim=1024, depth=24, num_heads=16,
                  decoder_embed_dim=512, decoder_depth=8, decoder_num_heads=16,
-                 mlp_ratio=4., norm_layer=nn.LayerNorm, norm_pix_loss=False):
+                 mlp_ratio=4., norm_layer=nn.LayerNorm, norm_pix_loss=False, encoder_state_dict=None):
         super().__init__()
 
         # --------------------------------------------------------------------------
@@ -61,6 +61,31 @@ class MaskedAutoencoderViT(nn.Module):
         self.norm_pix_loss = norm_pix_loss
 
         self.initialize_weights()
+
+        if not encoder_state_dict is None:
+            self.load_state_dict_encoder(encoder_state_dict)
+    
+    def load_state_dict_encoder(self, state_dict_path):
+        checkpoint = torch.load(state_dict_path, map_location='cpu')
+
+        print("Load pre-trained checkpoint from: %s" % state_dict_path)
+        checkpoint_model = checkpoint['model']
+        
+        _to_delete = []
+        for k in checkpoint_model.keys():
+            if not k.startswith('blocks'):
+                print(f'deleting key {k} from checkpoint...')
+                _to_delete.append(k)
+        
+        for k in _to_delete:
+            del checkpoint_model[k]
+
+        for k in self.blocks.state_dict().keys():
+            checkpoint_model[k] = checkpoint_model.pop('blocks.'+k)
+
+        self.blocks.load_state_dict(checkpoint_model)
+        
+        
 
     def initialize_weights(self):
         # initialization

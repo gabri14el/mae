@@ -12,17 +12,18 @@ python main_pretrain.py --batch_size 32 \
 
 
 
-python main_pretrain.py --batch_size 192 \
+python main_pretrain.py --batch_size 64 \
 --epochs 500 \
---model mae_vit_tiny_patch16 \
+--model mae_vit_base_patch16 \
 --mask_ratio 0.60 \
 --warmup_epochs 10 \
 --data_path /media/gabriel/BA1041B410417881/Users/gabrielc/Datasets/all_plus_utad \
 --blr 1.5e-4 --weight_decay 0.05 \
 --num_workers 1 \
 --world_size 1 \
---output output_pre_train_tiny \
---log output_pre_train_tiny \
+--output output_imagenet/base \
+--log output_imagenet/base \
+--checkpoint_encoder /home/gabriel/Projects/mae/mae_pretrain_vit_base.pth \
 --start_epoch 0
 
 python main_finetune.py \
@@ -38,3 +39,24 @@ python main_finetune.py \
 --nb_classes 43 \
 --num_workers 1 \
 --log ./output_ft_tiny
+
+%use the pretrain
+python main_pretrain.py --batch_size 80 \
+--epochs 2500 \
+--model mae_vit_base_patch16 \
+--mask_ratio 0.60 \
+--warmup_epochs 10 \
+--data_path /media/gabriel/BA1041B4104178811/Users/gabrielc/Datasets/all_plus_utad/ \
+--blr 5e-4 --weight_decay 0.05 \
+--num_workers 1 \
+--world_size 1 \
+--output output_imagenet_v2/base \
+--log output_imagenet_v2/base \
+--checkpoint_encoder /home/gabriel/Projects/mae/mae_pretrain_vit_base.pth \
+--start_epoch 0
+
+%visualize attention
+python visualize_attention.py --arch vit_base_patch16 \
+--pretrained_weights /media/gabriel/BA1041B4104178811/Users/gabrielc/Projects/mae/output_only_imagenet/ft/base/checkpoint.pth \
+--image_path /home/gabriel/Pictures/castas/2024/raw/20240425/Cabernet Sauvignon/IMG_20240425_183211.jpg \
+--decoder false
