@@ -92,7 +92,7 @@ def plot_confusion_matrix(cm, classes,
     plt.xlabel('Predicted label')
     return fig
 
-def confusion_matrix(test_data_generator, model, return_fig=False, class_labels=None, steps=None, mode='tensorflow', sns=False, normalize=False):
+def confusion_matrix(test_data_generator, model, return_fig=False, class_labels=None, steps=None, mode='tensorflow', sns=False, normalize=False, return_images_paths=False):
   
   #tensorflow mode
   #test_data_generator.reset()
@@ -121,6 +121,9 @@ def confusion_matrix(test_data_generator, model, return_fig=False, class_labels=
             _, predicted = torch.max(outputs.data, 1)
             true_classes.extend(labels.cpu().numpy().tolist())
             predicted_classes.extend(predicted.cpu().numpy().tolist())
+
+    equal = np.equal(true_classes, predicted_classes)
+    images_paths = list(zip(true_classes, equal, test_data_generator.dataset.samples))
   
   if class_labels == None:
     class_labels = [str(x) for x in np.unique(true_classes)]
@@ -133,6 +136,11 @@ def confusion_matrix(test_data_generator, model, return_fig=False, class_labels=
     fig = plot_confusion_matrix(cm, class_labels, normalize=normalize)
   else:
     fig = plot_confusion_matrix_sns(cm, class_labels, normalize=normalize)
+  if return_fig and return_images_paths:
+    return report, fig, images_paths
   if return_fig:
-      (report, fig)
+    return report, fig
+  if return_images_paths:
+    return report, images_paths
+  
   return report

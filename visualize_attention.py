@@ -78,7 +78,7 @@ def random_colors(N, bright=True):
     return colors
 
 
-def display_instances(image, mask, fname="test", figsize=(5, 5), blur=False, contour=True, alpha=0.5):
+def display_instances(image, mask, fname="test", figsize=(5, 5), blur=False, contour=True, alpha=0.5, save_fig=True):
     fig = plt.figure(figsize=figsize, frameon=False)
     ax = plt.Axes(fig, [0., 0., 1., 1.])
     ax.set_axis_off()
@@ -116,9 +116,57 @@ def display_instances(image, mask, fname="test", figsize=(5, 5), blur=False, con
                 p = Polygon(verts, facecolor="none", edgecolor=color)
                 ax.add_patch(p)
     ax.imshow(masked_image.astype(np.uint8), aspect='auto')
-    fig.savefig(fname)
-    print(f"{fname} saved.")
-    return
+    if save_fig:
+        fig.savefig(fname)
+        print(f"{fname} saved.")
+    plt.close(fig)
+    return masked_image.astype(np.uint8)
+
+def display_instances_v2(image, mask, fname="test", figsize=(5, 5), blur=False, contour=True, alpha=0.5, save_fig=True):
+    fig = plt.figure(figsize=figsize, frameon=False)
+    ax = plt.Axes(fig, [0., 0., 1., 1.])
+    ax.set_axis_off()
+    fig.add_axes(ax)
+    ax = plt.gca()
+
+    N = 1
+    print(mask.shape)
+    #mask = mask[None, :, :]
+    N = len(mask)
+    # Generate random colors
+    colors = random_colors(N)
+
+    # Show area outside image boundaries.
+    height, width = image.shape[:2]
+    margin = 0
+    ax.set_ylim(height + margin, -margin)
+    ax.set_xlim(-margin, width + margin)
+    ax.axis('off')
+    masked_image = image.astype(np.uint32).copy()
+    for i in range(N):
+        color = colors[i]
+        _mask = mask[i]
+        if blur:
+            _mask = cv2.blur(_mask,(10,10))
+        # Mask
+        masked_image = apply_mask(masked_image, _mask, color, alpha)
+        # Mask Polygon
+        # Pad to ensure proper polygons for masks that touch image edges.
+        if contour:
+            padded_mask = np.zeros((_mask.shape[0] + 2, _mask.shape[1] + 2))
+            padded_mask[1:-1, 1:-1] = _mask
+            contours = find_contours(padded_mask, 0.5)
+            for verts in contours:
+                # Subtract the padding and flip (y, x) to (x, y)
+                verts = np.fliplr(verts) - 1
+                p = Polygon(verts, facecolor="none", edgecolor=color)
+                ax.add_patch(p)
+    ax.imshow(masked_image.astype(np.uint8), aspect='auto')
+    if save_fig:
+        fig.savefig(fname)
+        print(f"{fname} saved.")
+    plt.close(fig)
+    return masked_image.astype(np.uint8)
 
 def show_all_heatmaps(heatmaps, save_path=None):
     """
@@ -357,5 +405,6 @@ if __name__ == '__main__':
 
     if args.threshold is not None:
         image = skimage.io.imread(os.path.join(args.output_dir, "img.png"))
+        display_instances_v2(image, th_attn, fname=os.path.join(args.output_dir, "mask_th_all_" + str(args.threshold) + ".png"), blur=False)
         for j in range(nh):
             display_instances(image, th_attn[j], fname=os.path.join(args.output_dir, "mask_th" + str(args.threshold) + "_head" + str(j) +".png"), blur=False)

@@ -15,6 +15,8 @@ from torchvision import datasets, transforms
 
 from timm.data import create_transform
 from timm.data.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
+import random
+import PIL.ImageFilter as ImageFilter
 
 
 def build_dataset(is_train, args, folder='val'):
@@ -26,6 +28,17 @@ def build_dataset(is_train, args, folder='val'):
     print(dataset)
 
     return dataset
+
+class GaussianBlur(object):
+    """Gaussian blur augmentation in SimCLR https://arxiv.org/abs/2002.05709"""
+
+    def __init__(self, sigma=[.1, 2.]):
+        self.sigma = sigma
+
+    def __call__(self, x):
+        sigma = random.uniform(self.sigma[0], self.sigma[1])
+        x = x.filter(ImageFilter.GaussianBlur(radius=sigma))
+        return x
 
 
 def build_transform(is_train, args):

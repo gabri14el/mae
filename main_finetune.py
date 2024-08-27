@@ -156,7 +156,10 @@ def get_args_parser():
                         help='url used to set up distributed training')
     
     parser.add_argument('--experiment_name', default=None,
-                        help='finetune from checkpoint')
+                        help='mlflow experiment name')
+    
+    parser.add_argument('--run_name', default=None,
+                        help='mlflow run name')
     
     return parser
 
@@ -342,7 +345,7 @@ def main(args):
     if args.experiment_name:
         mlflow.set_experiment(args.experiment_name)
     
-    run_name = args.model.split('_')[-2]+'_'+args.finetune.split('/')[-1].split('.')[0].split('-')[-1]
+    run_name = args.run_name or args.model.split('_')[-2]+'_'+args.finetune.split('/')[-1].split('.')[0].split('-')[-1]
     mlflow.start_run(run_name=run_name)
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed:
@@ -387,7 +390,7 @@ def main(args):
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
     print('Training time {}'.format(total_time_str))
     
-    path_weight_ft = os.path.join(args.output_dir, 'checkpoint.pth')
+    path_weight_ft = os.path.join(args.output_dir, 'checkpoint-best.pth')
     model.load_state_dict(torch.load(path_weight_ft,  map_location=torch.device('cpu'))['model'], strict=False)
 
     classes_alias = {'tinto cao': 'TC', 'tinta francisca': 'TF', 'alicante': 'AC', 'alveralhao': 'AV', 'arinto': 'AT', 'bastardo': 'BT', 'boal': 'BA', 'cabernet franc': 'CF', 'cabernet sauvignon': 'CS', 'carignon noir': 'CN', 'cercial': 'CC', 'chardonnay': 'CD', 'codega': 'CG', 'codega do larinho': 'CR', 'cornifesto': 'CT', 'donzelinho': 'DZ', 'donzelinho branco': 'DB', 'donzelinho tinto': 'DT', 'esgana cao': 'EC', 'fernao pires': 'FP', 'folgasao': 'FG', 'gamay': 'GM', 'gouveio': 'GV', 'malvasia corada': 'MC', 'malvasia fina': 'MF', 'malvasia preta': 'MP', 'malvasia rei': 'MR', 'merlot': 'ML', 'moscatel galego': 'MG', 'moscatel galego roxo': 'MX', 'mourisco tinto': 'MT', 'pinot blanc': 'PB', 'rabigato': 'RB', 'rufete': 'RF', 'samarrinho': 'SM', 'sauvignon blanc': 'SB', 'sousao': 'SS', 'tinta amarela': 'TA', 'tinta barroca': 'TB', 'tinta femea': 'TM', 'tinta roriz': 'TR', 'touriga francesa': 'TS', 'touriga nacional': 'TN', 'viosinho': 'VO'}
