@@ -277,23 +277,26 @@ def main(args):
     if args.checkpoint_encoder:
         if not 'bt' in args.model:
             model = models_mae.__dict__[args.model](norm_pix_loss=args.norm_pix_loss, 
-                                                    encoder_state_dict=args.checkpoint_encoder)
+                                                    encoder_state_dict=args.checkpoint_encoder,
+                                                    img_size=args.input_size)
         else:
             model = models_mae.__dict__[args.model](norm_pix_loss=args.norm_pix_loss, 
                                                     encoder_state_dict=args.checkpoint_encoder, 
                                                     bt_norm_layer=bt_normalization, 
                                                     barlowtwins_projetcor=args.projector, 
                                                     barlowtwins_lambd=args.lambd,
-                                                    barlowtwins_loss_coef=args.bt_loss_coef)
+                                                    barlowtwins_loss_coef=args.bt_loss_coef,
+                                                    img_size=args.input_size)
     else:
         if not 'bt' in args.model:
-            model = models_mae.__dict__[args.model](norm_pix_loss=args.norm_pix_loss)
+            model = models_mae.__dict__[args.model](norm_pix_loss=args.norm_pix_loss, img_size=args.input_size)
         else:
             model = models_mae.__dict__[args.model](norm_pix_loss=args.norm_pix_loss, 
                                                     bt_norm_layer=bt_normalization, 
                                                     barlowtwins_projetcor=args.projector, 
                                                     barlowtwins_lambd=args.lambd,
-                                                    barlowtwins_loss_coef=args.bt_loss_coef)
+                                                    barlowtwins_loss_coef=args.bt_loss_coef, 
+                                                    img_size=args.input_size)
     
     print(model)
     model.to(device)
