@@ -2,5 +2,6 @@ output/
 mlruns/
 output_epochs/
 output_pre_train_tiny/
+output*/
 *.png
 *.pth
