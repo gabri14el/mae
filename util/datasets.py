@@ -19,10 +19,13 @@ import random
 import PIL.ImageFilter as ImageFilter
 
 
-def build_dataset(is_train, args, folder='val'):
+def build_dataset(is_train, args, folder='val', extra=False):
     transform = build_transform(is_train, args)
 
-    root = os.path.join(args.data_path, 'train' if is_train else folder)
+    if extra:
+        root = os.path.join(args.extra_test_dataset, folder)
+    else:
+        root = os.path.join(args.data_path, 'train' if is_train else folder)
     dataset = datasets.ImageFolder(root, transform=transform)
 
     print(dataset)

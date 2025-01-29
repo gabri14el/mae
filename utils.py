@@ -32,24 +32,37 @@ def normalize_rgb_ln(X, preprocess=None):
 def plot_confusion_matrix_sns(cm, classes,
                         normalize=False,
                         title='Confusion matrix',
-                        cmap=plt.cm.Blues):
+                        cmap=plt.cm.Greens, 
+                        only_heatmap=False):
     
-    print(cm)
+    min = np.min(cm)
+    max = np.max(cm)
+    #print(cm)
     if normalize:
         #print(cm.sum(axis=1)[:, np.newaxis])
         cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]+0.0000001
-        cm = np.around(cm, decimals=2)
+        cm = np.around(cm, decimals=4)
+        min = 0
+        max = 1
     
-    print(cm)
+    #print(cm)
     df_cm = pd.DataFrame(cm, index = classes, columns=classes)
     
-    vmin = np.min(cm)
-    vmax = np.max(cm)
+    
     off_diag_mask = np.eye(*cm.shape, dtype=bool)
-    fig_size = len(classes) * 1.2
-    fig = plt.figure(figsize=(30, 30))
+    if(len(classes) < 20):
+      figsize = len(classes)
+    elif only_heatmap:
+      figsize = 3
+    else:
+       figsize = 0.65*len(classes)
 
-    sns.heatmap(df_cm, annot=True,cmap="OrRd")
+    fig = plt.figure(figsize=(figsize+1, figsize), dpi=300)
+
+    if only_heatmap:
+      sns.heatmap(df_cm, annot=False,cmap=cmap, vmin=min, vmax=max)
+    else:
+      sns.heatmap(df_cm, annot=True,cmap=cmap, vmin=min, vmax=max)
 
     plt.title(title)
     plt.ylabel('True label')
@@ -63,36 +76,55 @@ def plot_confusion_matrix_sns(cm, classes,
 def plot_confusion_matrix(cm, classes,
                         normalize=False,
                         title='Confusion matrix',
-                        cmap=plt.cm.Blues):
+                        cmap=plt.cm.Greens,
+                        only_heatmap=False):
     """
     This function prints and plots the confusion matrix.
     Normalization can be applied by setting `normalize=True`.
     """
-    fig = plt.figure(figsize=(30, 30))
+
+
+    if(len(classes) < 20):
+      figsize = len(classes)
+    elif only_heatmap:
+      figsize = 3
+    else:
+       figsize = 0.65*len(classes)
+
+    fig = plt.figure(figsize=(figsize+1, figsize), dpi=300)
+
+    min = cm.min()
+    max = cm.max()
+    if normalize:
+        cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+        cm = np.around(cm, decimals=4)
+        min = 0
+        max = 1
+
     plt.imshow(cm, interpolation='nearest', cmap=cmap)
     plt.title(title)
     plt.colorbar()
-    tick_marks = np.arange(len(classes))
-    plt.xticks(tick_marks, classes, rotation=45)
-    plt.yticks(tick_marks, classes)
+    plt.clim(min, max)
 
-    if normalize:
-        cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
-        cm = np.around(cm, decimals=2)
+    if not only_heatmap:
+      tick_marks = np.arange(len(classes))
+      plt.xticks(tick_marks, classes, rotation=45)
+      plt.yticks(tick_marks, classes)
     
-
-    thresh = cm.max() / (2/3.)
-    for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])):
-        plt.text(j, i, cm[i, j],
-            horizontalalignment="center",
-            color="white" if cm[i, j] > thresh else "black")
+    
+    if not only_heatmap:
+      thresh = cm.max() / (2/3.)
+      for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])):
+          plt.text(j, i, cm[i, j],
+              horizontalalignment="center",
+              color="white" if cm[i, j] > thresh else "black")
 
     plt.tight_layout()
     plt.ylabel('True label')
     plt.xlabel('Predicted label')
     return fig
 
-def confusion_matrix(test_data_generator, model, return_fig=False, class_labels=None, steps=None, mode='tensorflow', sns=False, normalize=False, return_images_paths=False):
+def confusion_matrix(test_data_generator, model, return_fig=False, class_labels=None, steps=None, mode='tensorflow', sns=False, normalize=False, return_images_paths=False, only_heatmap=False, cmap=plt.cm.Greens):
   
   #tensorflow mode
   #test_data_generator.reset()
@@ -133,9 +165,9 @@ def confusion_matrix(test_data_generator, model, return_fig=False, class_labels=
   cm = metrics.confusion_matrix(true_classes, predicted_classes)
   print(report)
   if not sns:
-    fig = plot_confusion_matrix(cm, class_labels, normalize=normalize)
+    fig = plot_confusion_matrix(cm, class_labels, normalize=normalize, only_heatmap=only_heatmap, cmap=cmap)
   else:
-    fig = plot_confusion_matrix_sns(cm, class_labels, normalize=normalize)
+    fig = plot_confusion_matrix_sns(cm, class_labels, normalize=normalize, only_heatmap=only_heatmap, cmap=cmap)
   if return_fig and return_images_paths:
     return report, fig, images_paths
   if return_fig:

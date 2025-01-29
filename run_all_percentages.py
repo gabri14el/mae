@@ -12,8 +12,10 @@ epochs = sorted(epochs, key=lambda x: int(x), reverse=True)
 percentages = [1, 5, 10, 25, 50, 75]
 batches = [80]
 
-maes = ['/home/gabriel/Projects/mae/mae_pretrain_vit_base.pth', '/media/gabriel/BA1041B410417881/Users/gabrielc/Projects/mae/others/output_epochs/pre_train/base/checkpoint-2000.pth']
-aliases = ['imagenet', 'ours']
+#maes = ['/home/gabriel/Projects/mae/mae_pretrain_vit_base.pth', '/media/gabriel/BA1041B410417881/Users/gabrielc/Projects/mae/others/output_epochs/pre_train/base/checkpoint-2000.pth']
+#aliases = ['imagenet', 'ours']
+maes = ['/media/gabriel/BA1041B410417881/Users/gabrielc/Projects/mae/bigger_dataset2/pretrain/base/checkpoint-2500.pth']
+aliases = ['ourPuls']
 ratio = 0.6
 
 

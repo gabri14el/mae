@@ -161,6 +161,12 @@ def get_args_parser():
     parser.add_argument('--run_name', default=None,
                         help='mlflow run name')
     
+    parser.add_argument('--solo', action='store_true', help='use chckpoint from solo-learn library')
+
+    parser.add_argument('--extra_test_dataset', default=None, help='path to extra test dataset')
+
+    parser.add_argument('--freeze_backbone', action='store_true', help='freeze backbone')
+
     return parser
 
 
@@ -183,6 +189,13 @@ def main(args):
     dataset_val = build_dataset(is_train=False, args=args)
     dataset_test = build_dataset(is_train=False, args=args, folder='test')
 
+    dataset_extra_test = None
+    if args.extra_test_dataset:
+        dataset_extra_test = build_dataset(is_train=False, args=args, folder='', extra=True)
+
+    if args.solo:
+        args.global_pool = False
+
     if True:  # args.distributed:
         num_tasks = misc.get_world_size()
         global_rank = misc.get_rank()
@@ -201,9 +214,17 @@ def main(args):
             sampler_test = torch.utils.data.DistributedSampler(
                 dataset_test, num_replicas=num_tasks, rank=global_rank, shuffle=True)
              # shuffle=True to reduce monitor bias
+
+            sampler_extra_test = None
+            if dataset_extra_test:
+                sampler_extra_test = torch.utils.data.DistributedSampler(
+                    dataset_extra_test, num_replicas=num_tasks, rank=global_rank, shuffle=True)
         else:
             sampler_val = torch.utils.data.SequentialSampler(dataset_val)
             sampler_test = torch.utils.data.SequentialSampler(dataset_test)
+            sampler_extra_test = None
+            if dataset_extra_test:
+                sampler_extra_test = torch.utils.data.SequentialSampler(dataset_extra_test)
     else:
         sampler_train = torch.utils.data.RandomSampler(dataset_train)
         sampler_val = torch.utils.data.SequentialSampler(dataset_val)
@@ -238,6 +259,16 @@ def main(args):
         drop_last=False
     )
 
+    data_loader_extra_test = None
+    if dataset_extra_test:
+        data_loader_extra_test = torch.utils.data.DataLoader(
+            dataset_extra_test, sampler=sampler_extra_test,
+            batch_size=args.batch_size,
+            num_workers=args.num_workers,
+            pin_memory=args.pin_mem,
+            drop_last=False
+        )
+
     mixup_fn = None
     mixup_active = args.mixup > 0 or args.cutmix > 0. or args.cutmix_minmax is not None
     if mixup_active:
@@ -257,12 +288,25 @@ def main(args):
         checkpoint = torch.load(args.finetune, map_location='cpu')
 
         print("Load pre-trained checkpoint from: %s" % args.finetune)
-        checkpoint_model = checkpoint['model']
-        state_dict = model.state_dict()
-        for k in ['head.weight', 'head.bias']:
-            if k in checkpoint_model and checkpoint_model[k].shape != state_dict[k].shape:
-                print(f"Removing key {k} from pretrained checkpoint")
-                del checkpoint_model[k]
+        if not args.solo:
+            checkpoint_model = checkpoint['model']
+            state_dict = model.state_dict()
+            for k in ['head.weight', 'head.bias']:
+                if k in checkpoint_model and checkpoint_model[k].shape != state_dict[k].shape:
+                    print(f"Removing key {k} from pretrained checkpoint")
+                    del checkpoint_model[k]
+        
+        else:
+            _new_dict = {}
+            state_dict = checkpoint['state_dict']
+            for k in model.state_dict().keys():
+                if k.startswith('head.') or k.startswith('fc_norm.'):
+                    print('Skipping: ', k)
+                elif 'backbone.'+k in state_dict:
+                    _new_dict[k] = state_dict['backbone.'+k]
+                else:
+                    print('Not found: ', k)
+            checkpoint_model = _new_dict
 
         print(model.head)
        
@@ -287,6 +331,12 @@ def main(args):
 
         print(model.head)
 
+    if args.freeze_backbone:
+        if args.freeze_backbone:
+            for name, param in model.named_parameters():
+                if 'head' not in name and 'fc_norm' not in name:
+                    param.requires_grad = False
+    
     model.to(device)
 
     model_without_ddp = model
@@ -315,6 +365,8 @@ def main(args):
         no_weight_decay_list=model_without_ddp.no_weight_decay(),
         layer_decay=args.layer_decay
     )
+
+    
     optimizer = torch.optim.AdamW(param_groups, lr=args.lr)
     loss_scaler = NativeScaler()
 
@@ -395,6 +447,13 @@ def main(args):
 
     classes_alias = {'tinto cao': 'TC', 'tinta francisca': 'TF', 'alicante': 'AC', 'alveralhao': 'AV', 'arinto': 'AT', 'bastardo': 'BT', 'boal': 'BA', 'cabernet franc': 'CF', 'cabernet sauvignon': 'CS', 'carignon noir': 'CN', 'cercial': 'CC', 'chardonnay': 'CD', 'codega': 'CG', 'codega do larinho': 'CR', 'cornifesto': 'CT', 'donzelinho': 'DZ', 'donzelinho branco': 'DB', 'donzelinho tinto': 'DT', 'esgana cao': 'EC', 'fernao pires': 'FP', 'folgasao': 'FG', 'gamay': 'GM', 'gouveio': 'GV', 'malvasia corada': 'MC', 'malvasia fina': 'MF', 'malvasia preta': 'MP', 'malvasia rei': 'MR', 'merlot': 'ML', 'moscatel galego': 'MG', 'moscatel galego roxo': 'MX', 'mourisco tinto': 'MT', 'pinot blanc': 'PB', 'rabigato': 'RB', 'rufete': 'RF', 'samarrinho': 'SM', 'sauvignon blanc': 'SB', 'sousao': 'SS', 'tinta amarela': 'TA', 'tinta barroca': 'TB', 'tinta femea': 'TM', 'tinta roriz': 'TR', 'touriga francesa': 'TS', 'touriga nacional': 'TN', 'viosinho': 'VO'}
     report = utils.confusion_matrix(data_loader_test, model, class_labels=[classes_alias[c.lower()] for c in classes],mode='pytorch', sns=True, normalize=True)
+
+    mlflow.log_figure(plt.gcf(), 'cm.png')
+    mlflow.log_text(report, F"cm.txt")
+
+    if data_loader_extra_test:
+        report_extra = utils.confusion_matrix(data_loader_extra_test, model, class_labels=[classes_alias[c.lower()] for c in classes],mode='pytorch', sns=True, normalize=True)
+
     
     mlflow.log_param("batch_size", args.batch_size)
     mlflow.log_param("dim", args.input_size)
@@ -402,8 +461,9 @@ def main(args):
     mlflow.log_param("optimizer", 'AdamW')
     mlflow.log_param("lr", args.lr)
     mlflow.log_artifact(path_weight_ft)
-    mlflow.log_text(report, F"cm.txt")
-    mlflow.log_figure(plt.gcf(), 'cm.png')
+    if data_loader_extra_test:
+        mlflow.log_text(report_extra, F"cm_extra.txt")
+        mlflow.log_figure(plt.gcf(), 'cm_extra.png')
     mlflow.log_param("loss", 'cross_entropy')
     mlflow.log_param("comments", comments or '')
     mlflow.end_run()

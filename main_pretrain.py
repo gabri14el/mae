@@ -34,6 +34,9 @@ import models_mae
 from util.datasets import GaussianBlur
 from engine_pretrain import train_one_epoch
 
+IMAGENET_MEAN = np.array([0.485, 0.456, 0.406]) * 255
+IMAGENET_STD = np.array([0.229, 0.224, 0.225]) * 255
+
 
 def get_args_parser():
     parser = argparse.ArgumentParser('MAE pre-training', add_help=False)
@@ -96,6 +99,8 @@ def get_args_parser():
     parser.add_argument('--no_pin_mem', action='store_false', dest='pin_mem')
     parser.set_defaults(pin_mem=True)
 
+    parser.add_argument('--ffcv', action='store_true')
+
     # distributed training parameters
     parser.add_argument('--world_size', default=1, type=int,
                         help='number of distributed processes')
@@ -123,12 +128,27 @@ def main(args):
     cudnn.benchmark = True
 
     # simple augmentation
+    if args.ffcv:
+        # Random resized crop
+        decoder = RandomResizedCropRGBImageDecoder((args.input_size, args.input_size), scale=(0.2, 1.0))
+
+        # Data decoding and augmentation
+        image_pipeline = [decoder, RandomHorizontalFlip(), ToTensor(), ToTorchImage(), NormalizeImage(IMAGENET_MEAN, IMAGENET_STD, np.float16)]
+        label_pipeline = [IntDecoder(), ToTensor()]
+
+        # Pipeline for each data field
+        pipelines = {
+            'image': image_pipeline,
+            'label': label_pipeline
+        } 
+
+    
     transform_train = transforms.Compose([
             transforms.RandomResizedCrop(args.input_size, scale=(0.2, 1.0), interpolation=3),  # 3 is bicubic
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
-    
+
     if args.hard_augmentation:
         transform_train = transforms.Compose(
             [
@@ -142,6 +162,7 @@ def main(args):
                 transforms.ToTensor(),
                 transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])]
         )
+
     dataset_train = datasets.ImageFolder(os.path.join(args.data_path, 'train'), transform=transform_train)
     print(dataset_train)
 
@@ -161,13 +182,16 @@ def main(args):
     else:
         log_writer = None
 
-    data_loader_train = torch.utils.data.DataLoader(
-        dataset_train, sampler=sampler_train,
-        batch_size=args.batch_size,
-        num_workers=args.num_workers,
-        pin_memory=args.pin_mem,
-        drop_last=True,
-    )
+    if args.ffcv:
+        data_loader_train = Loader(os.path.join(args.data_path, 'ds.beton'), batch_size=args.batch_size, order=OrderOption.RANDOM, pipelines=pipelines, distributed=False, num_workers=args.num_workers, drop_last=True)
+    else:
+        data_loader_train = torch.utils.data.DataLoader(
+            dataset_train, sampler=sampler_train,
+            batch_size=args.batch_size,
+            num_workers=args.num_workers,
+            pin_memory=args.pin_mem,
+            drop_last=True,
+        )
     
     
     if args.checkpoint_encoder:
@@ -250,4 +274,9 @@ if __name__ == '__main__':
     args = args.parse_args()
     if args.output_dir:
         Path(args.output_dir).mkdir(parents=True, exist_ok=True)
+    if args.ffcv:
+        from ffcv.loader import Loader, OrderOption
+        from ffcv.transforms import ToTensor, ToDevice, ToTorchImage, Cutout, NormalizeImage, RandomHorizontalFlip
+        from ffcv.fields.decoders import IntDecoder, RandomResizedCropRGBImageDecoder
+        from ffcv.loader import OrderOption
     main(args)
