@@ -33,7 +33,7 @@ from util.misc import NativeScalerWithGradNormCount as NativeScaler
 import models_mae
 from util.datasets import GaussianBlur
 from engine_pretrain import train_one_epoch, train_one_epoch_dual
-from util.bt_sched import cosine_scheduler, exp_scheduler
+
 
 IMAGENET_MEAN = np.array([0.485, 0.456, 0.406]) * 255
 IMAGENET_STD = np.array([0.229, 0.224, 0.225]) * 255
@@ -225,7 +225,7 @@ def main(args):
             transforms.Resize(args.input_size, interpolation=3),  # 3 is bicubic
             transforms.CenterCrop(args.input_size),
             transforms.ToTensor(), 
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])]),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
         
         
         dataset_eval_train = datasets.ImageFolder(os.path.join(args.knn_dataset, 'train'), transform=transform_eval)
