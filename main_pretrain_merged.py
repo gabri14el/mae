@@ -139,7 +139,7 @@ class Transform:
         if args.bt_strong_augmentation:
             self.transform_prime = transforms.Compose(
             [
-                transforms.RandomResizedCrop(224, scale=(0.2, 1.)),
+                transforms.RandomResizedCrop(args.input_size, scale=(0.2, 1.)),
                 transforms.RandomApply([
                     transforms.ColorJitter(0.4, 0.4, 0.4, 0.1)  # not strengthened
                 ], p=0.8),
