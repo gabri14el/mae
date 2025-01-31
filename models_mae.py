@@ -554,7 +554,7 @@ class MaskedAutoencoderViTBT(nn.Module):
         y2 = latent2[:, 0, :]
         bt_loss, c = self.barlow_twins(y1, y2, return_matrix=True)
         
-        if bt_coef is not None:
+        if bt_coef is None:
             bt_coef = self.barlowtwins_loss_coef
          
         bt_loss = bt_coef * bt_loss
