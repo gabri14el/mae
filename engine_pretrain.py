@@ -107,12 +107,14 @@ def train_one_epoch_dual(model: torch.nn.Module,
     
     if args.bt_loss_coef_decay == 'exp':
         bt_coef = exp_scheduler(epoch, args.epochs) * args.bt_loss_coef
+        print('entred exp decay bt loss coef')
     elif args.bt_loss_coef_decay == 'cosine':
         bt_coef = cosine_scheduler(epoch, args.epochs) * args.bt_loss_coef
+        print('entred cosine decay bt loss coef')
     else:
         bt_coef = args.bt_loss_coef
 
-    metric_logger.update(bt_coef=bt_coef)
+    
     
 
     accum_iter = args.accum_iter
@@ -158,6 +160,7 @@ def train_one_epoch_dual(model: torch.nn.Module,
         metric_logger.update(mae_loss_1=mae_loss1.item())
         metric_logger.update(mae_loss_2=mae_loss2.item())
         metric_logger.update(bt_loss=bt_loss.item())
+        metric_logger.update(bt_coef=bt_coef)
 
         lr = optimizer.param_groups[0]["lr"]
         metric_logger.update(lr=lr)
