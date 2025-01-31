@@ -269,7 +269,7 @@ class BarlowTwins(nn.Module):
         assert n == m
         return x.flatten()[:-1].view(n - 1, n + 1)[:, 1:].flatten()
 
-    def forward(self, y1, y2):
+    def forward(self, y1, y2, return_matrix=False):
         z1 = self.projector(y1)
         z2 = self.projector(y2)
 
@@ -283,7 +283,10 @@ class BarlowTwins(nn.Module):
         on_diag = torch.diagonal(c).add_(-1).pow_(2).sum()
         off_diag = self.off_diagonal(c).pow_(2).sum()
         loss = on_diag + self.lambd * off_diag
-        return loss
+        if not return_matrix:
+            return loss
+        else:
+            return loss, c
     
 class MaskedAutoencoderViTBT(nn.Module):
     """ Masked Autoencoder with VisionTransformer backbone
@@ -549,10 +552,12 @@ class MaskedAutoencoderViTBT(nn.Module):
         #get the class token for y1 and y2
         y1 = latent1[:, 0, :]
         y2 = latent2[:, 0, :]
-
+        bt_loss, c = self.barlow_twins(y1, y2, return_matrix=True)
+        
         if bt_coef is not None:
             bt_coef = self.barlowtwins_loss_coef
-        bt_loss = bt_coef * self.barlow_twins(y1, y2)
+         
+        bt_loss = bt_coef * bt_loss
 
         if prev_iteractions is not None:
             nn = torch.zeros_like(y1).to(x1.device)
@@ -566,11 +571,11 @@ class MaskedAutoencoderViTBT(nn.Module):
                 #remove the closest element from prev_iteractions
                 prev_iteractions = torch.cat([prev_iteractions[:knn.indices[0]], prev_iteractions[knn.indices[0]+1:]], dim=0)
 
-            bt_loss2 = self.barlowtwins_loss_coef * self.barlow_twins(y1, nn)
+            bt_loss2, c2 = bt_coef* self.barlow_twins(y1, nn)
 
-            return mae_loss1, mae_loss2, bt_loss, bt_loss2, pred1, pred2, mask1, mask2, latent1, latent2
+            return mae_loss1, mae_loss2, bt_loss, c, bt_loss2, c2, pred1, pred2, mask1, mask2, latent1, latent2
         
-        return mae_loss1, mae_loss2, bt_loss, pred1, pred2, mask1, mask2, latent1, latent2
+        return mae_loss1, mae_loss2, bt_loss, c, pred1, pred2, mask1, mask2, latent1, latent2
         #return loss, pred, mask
 
 

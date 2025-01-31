@@ -22,6 +22,9 @@ import util.misc as misc
 import util.lr_sched as lr_sched
 from util.bt_sched import cosine_scheduler, exp_scheduler
 
+import umap
+import umap.plot
+
 
 def train_one_epoch(model: torch.nn.Module,
                     data_loader: Iterable, optimizer: torch.optim.Optimizer,
@@ -108,6 +111,8 @@ def train_one_epoch_dual(model: torch.nn.Module,
         bt_coef = cosine_scheduler(epoch, args.epochs) * args.bt_loss_coef
     else:
         bt_coef = args.bt_loss_coef
+
+    metric_logger.update(bt_coef=bt_coef)
     
 
     accum_iter = args.accum_iter
@@ -117,6 +122,10 @@ def train_one_epoch_dual(model: torch.nn.Module,
     if log_writer is not None:
         print('log_dir: {}'.format(log_writer.log_dir))
 
+        return_extras = {}
+
+    projector_dim = int(args.projector.split('-')[-1])
+    accum_matrix = np.zeros((projector_dim, projector_dim))
     for data_iter_step, ((x1, x2), _) in enumerate(metric_logger.log_every(data_loader, print_freq, header)):
 
         # we use a per iteration (instead of per epoch) lr scheduler
@@ -127,7 +136,7 @@ def train_one_epoch_dual(model: torch.nn.Module,
         x2 = x2.to(device, non_blocking=True)
 
         with torch.cuda.amp.autocast():
-            mae_loss1, mae_loss2, bt_loss, pred1, pred2, mask1, mask2, latent1, latent2 = model(x1, x2, mask_ratio=args.mask_ratio, bt_coef=bt_coef)
+            mae_loss1, mae_loss2, bt_loss, c, pred1, pred2, mask1, mask2, latent1, latent2 = model(x1, x2, mask_ratio=args.mask_ratio, bt_coef=bt_coef)
             loss = mae_loss1 + mae_loss2 + bt_loss
             #print('mae_loss1: {}, mae_loss2: {}, bt_loss: {}'.format(mae_loss1.item(), mae_loss2.item(), bt_loss.item()))
 
@@ -161,28 +170,45 @@ def train_one_epoch_dual(model: torch.nn.Module,
             epoch_1000x = int((data_iter_step / len(data_loader) + epoch) * 1000)
             log_writer.add_scalar('train_loss', loss_value_reduce, epoch_1000x)
             log_writer.add_scalar('lr', lr, epoch_1000x)
+        
+        accum_matrix = np.sum([accum_matrix, c.detach().cpu().numpy()], axis=0)
             
-
-
+    
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()
     
+    accum_matrix = accum_matrix / (data_iter_step + 1)
+    return_extras['accum_matrix'] = {'value':accum_matrix, 'type':'txt'}
 
     
     if global_rank == 0 and args.knn_eval:
-        knn = train_knn_classifier(model, data_loader_eval_train, device)
-        f1, accuracy = evaluate_knn_classifier(knn, model, data_loader_eval_val, device)
+        train_features, train_labels = extract_features(model, data_loader_eval_train, device)
+        val_features, val_labels = extract_features(model, data_loader_eval_val, device)
+        
+        knn = train_knn_classifier(train_features, train_labels)
+        f1, accuracy = evaluate_knn_classifier(knn, val_features, val_labels)
         #print('KNN evaluation: f1: {}, accuracy: {}'.format(f1, accuracy))
         metric_logger.update(knn_f1_val=f1)
         metric_logger.update(knn_accuracy_val=accuracy)
 
+        #if True:
+        if (epoch+1) % 100 == 0:
+            #train_mapper = umap.UMAP().fit(train_features)
+            val_mapper = umap.UMAP().fit(val_features)
+
+            #train_image = umap.plot.points(train_mapper, labels=train_labels)
+            val_image = umap.plot.points(val_mapper, labels=val_labels)
+
+            #return_extras['umap_train_image'] = {'value':train_image, 'type':'axis'}
+            return_extras['umap_val_image'] = {'value':val_image, 'type':'axis'}
+        
+
     print("Averaged stats:", metric_logger)
 
-    return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
+    return {k: meter.global_avg for k, meter in metric_logger.meters.items()}, return_extras
 
 
-#method that train a k-nn classifier based on the features extracted from the model
-def train_knn_classifier(model, data_loader: Iterable, device: torch.device, k: int = 5):
+def extract_features(model: torch.nn.Module, data_loader: Iterable, device: torch.device):
     model.eval()
     features = []
     labels = []
@@ -200,33 +226,22 @@ def train_knn_classifier(model, data_loader: Iterable, device: torch.device, k: 
     features = np.concatenate(features, axis=0)
     labels = np.concatenate(labels, axis=0)
 
+    return features, labels
+
+
+#method that train a k-nn classifier based on the features extracted from the model
+def train_knn_classifier(features, labels, k: int = 5):
     # Train k-NN classifier
     knn = KNeighborsClassifier(n_neighbors=k)
     knn.fit(features, labels)
 
     return knn
 
-def evaluate_knn_classifier(knn, model, data_loader: Iterable, device: torch.device):
-    model.eval()
-    features = []
-    true_labels = []
-
-    with torch.no_grad():
-        for (samples, targets) in data_loader:
-            samples = samples.to(device, non_blocking=True)
-            targets = targets.to(device, non_blocking=True)
-
-            # Extract features from the model
-            feature = model.forward_representations(samples)
-            features.append(feature.cpu().numpy())
-            true_labels.append(targets.cpu().numpy())
-
-    features = np.concatenate(features, axis=0)
-    true_labels = np.concatenate(true_labels, axis=0)
-
+def evaluate_knn_classifier(knn, features, true_labels):
     # Predict using k-NN classifier
     pred_labels = knn.predict(features)
     f1 = f1_score(true_labels, pred_labels, average='macro')
     accuracy = accuracy_score(true_labels, pred_labels)
 
     return f1, accuracy
+

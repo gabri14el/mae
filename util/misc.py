@@ -19,6 +19,7 @@ from pathlib import Path
 import torch
 import torch.distributed as dist
 from torch import inf
+import numpy as np
 
 
 class SmoothedValue(object):
@@ -211,6 +212,7 @@ def is_main_process():
 def save_on_master(*args, **kwargs):
     if is_main_process():
         torch.save(*args, **kwargs)
+        
 
 
 def init_distributed_mode(args):
@@ -315,6 +317,21 @@ def save_model(args, epoch, model, model_without_ddp, optimizer, loss_scaler, sa
     else:
         client_state = {'epoch': epoch}
         model.save_checkpoint(save_dir=args.output_dir, tag="checkpoint-%s" % epoch_name, client_state=client_state)
+
+def save_extras(args, epoch, extras):
+    output_dir = Path(args.output_dir)
+    epoch_name = str(epoch)
+    
+    for extra, v in extras.items():
+        extension = 'txt' if v['type'] == 'txt' else 'png'
+        path = os.path.join(output_dir, f'{extra}-{epoch_name}.{extension}') 
+        if is_main_process:
+            if v['type'] == 'txt':
+                np.savetxt(path, v['value'], delimiter=',')
+            elif v['type'] == 'axis':
+                v['value'].figure.set_size_inches(18.5, 15.5, forward=True)
+                v['value'].figure.savefig(path, dpi=300)
+        
 
 
 def load_model(args, model_without_ddp, optimizer, loss_scaler):

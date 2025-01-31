@@ -333,7 +333,7 @@ def main(args):
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed:
             data_loader_train.sampler.set_epoch(epoch)
-        train_stats = train_one_epoch_dual(
+        train_stats, extras = train_one_epoch_dual(
             model, data_loader_train,
             optimizer, device, epoch, loss_scaler,
             log_writer=log_writer,
@@ -346,9 +346,13 @@ def main(args):
             misc.save_model(
                 args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
                 loss_scaler=loss_scaler, epoch=epoch)
+            misc.save_extras(args=args, extras=extras, epoch=epoch)
+            
         misc.save_model(
                 args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
                 loss_scaler=loss_scaler, epoch=epoch, checkpoint=True)
+        
+        
         
         if better_loss > train_stats['loss']:
             better_loss = train_stats['loss']
