@@ -162,9 +162,9 @@ def train_one_epoch_dual(model: torch.nn.Module,
         metric_logger.update(mae_loss_1=mae_loss1.item())
         metric_logger.update(mae_loss_2=mae_loss2.item())
         metric_logger.update(bt_loss=bt_loss.item())
-        metric_logger.logger.update(bt_mixup_loss=bt_mixup_loss.item())
+        metric_logger.update(bt_mixup_loss=bt_mixup_loss.item())
         metric_logger.update(bt_coef=bt_coef)
-        
+
         lr = optimizer.param_groups[0]["lr"]
         metric_logger.update(lr=lr)
 
