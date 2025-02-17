@@ -594,15 +594,15 @@ class MaskedAutoencoderViTBT(nn.Module):
 
             
             
-            _, y_mixed_matrix1 = bt_function(y_mixed, y1, return_matrix=True)
-            _, y_mixed_matrix2 = bt_function(y_mixed, y2, return_matrix=True)
+            _, y_mixed_matrix1,_, _ = bt_function(y_mixed, y1, return_matrix=True)
+            _, y_mixed_matrix2,_, _ = bt_function(y_mixed, y2, return_matrix=True)
 
-            _, parcel1 = bt_function(y1, y1, return_matrix=True)
-            _, parcel2 = bt_function(y2[index,:], y1, return_matrix=True)
+            _, parcel1,_, _ = bt_function(y1, y1, return_matrix=True)
+            _, parcel2,_, _ = bt_function(y2[index,:], y1, return_matrix=True)
             cc_mix1_gt = alpha*parcel1 + (1-alpha)*parcel2
 
-            _, parcel1 = bt_function(y1, y2, return_matrix=True)
-            _, parcel2 = bt_function(y2[index,:], y2, return_matrix=True)
+            _, parcel1,_, _ = bt_function(y1, y2, return_matrix=True)
+            _, parcel2,_, _ = bt_function(y2[index,:], y2, return_matrix=True)
             cc_mix2_gt = alpha*parcel1 + (1-alpha)*parcel2
 
             bt_loss_mix = bt_mixup_loss_scale * self.barlow_twins.lambd * ((y_mixed_matrix1 - cc_mix1_gt).pow(2).sum() + (y_mixed_matrix2 - cc_mix2_gt).pow(2).sum())
