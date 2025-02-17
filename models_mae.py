@@ -260,7 +260,7 @@ class BarlowTwins(nn.Module):
         layers.append(nn.Linear(sizes[-2], sizes[-1], bias=False))
         self.projector = nn.Sequential(*layers)
 
-        # normalization layer for the representations z1 and z2
+        # normalization layer for the representations z1 and       z2
         self.bn = nn.BatchNorm1d(sizes[-1], affine=False)
 
     def off_diagonal(self, x):
@@ -268,6 +268,31 @@ class BarlowTwins(nn.Module):
         n, m = x.shape
         assert n == m
         return x.flatten()[:-1].view(n - 1, n + 1)[:, 1:].flatten()
+
+
+    def forward_all4one(self, y1, y2, lmbda=0.5, return_matrix=False):
+        z1 = self.projector(y1)
+        z2 = self.projector(y2)
+
+        # empirical cross-correlation matrix
+        
+        #first difference, normalize the vectors using normalize function over batch normalization
+        #c = self.bn(z1).T @ self.bn(z2)
+        c = torch.nn.functional.normalize(z1, dim=0).T @ torch.nn.functional.normalize(z2, dim=0)
+
+        # sum the cross-correlation matrix between all gpus
+        #second diffence, there is no division by the batch size of the values of the matrices
+        #c.div_(y1.shape[0])
+        #torch.distributed.all_reduce(c)
+
+        on_diag = (torch.diagonal(c).add_(-1).pow_(2).mean() * 0.5).sqrt()
+        off_diag = (self.off_diagonal(c).pow_(2).mean() * 0.5).sqrt()
+        loss = ((1-lmbda) * on_diag) +  (lmbda * off_diag)
+        
+        if not return_matrix:
+            return loss
+        else:
+            return loss, c, on_diag, off_diag
 
     def forward(self, y1, y2, return_matrix=False):
         z1 = self.projector(y1)
@@ -286,7 +311,7 @@ class BarlowTwins(nn.Module):
         if not return_matrix:
             return loss
         else:
-            return loss, c
+            return loss, c, on_diag, off_diag
     
 class MaskedAutoencoderViTBT(nn.Module):
     """ Masked Autoencoder with VisionTransformer backbone
@@ -539,7 +564,7 @@ class MaskedAutoencoderViTBT(nn.Module):
         return final_cls
 
 
-    def forward(self, x1, x2, mask_ratio=0.75, prev_iteractions=None, bt_coef=None):
+    def forward(self, x1, x2, mask_ratio=0.75, prev_iteractions=None, bt_coef=None, bt_mode='default'):
         latent1, mask1, ids_restore1 = self.forward_encoder(x1, mask_ratio)
         latent2, mask2, ids_restore2 = self.forward_encoder(x2, mask_ratio)
         
@@ -552,7 +577,10 @@ class MaskedAutoencoderViTBT(nn.Module):
         #get the class token for y1 and y2
         y1 = latent1[:, 0, :]
         y2 = latent2[:, 0, :]
-        bt_loss, c = self.barlow_twins(y1, y2, return_matrix=True)
+        if bt_mode == 'default':
+            bt_loss, c, on_diag, off_diag = self.barlow_twins(y1, y2, return_matrix=True)
+        else:
+            bt_loss, c, on_diag, off_diag = self.barlow_twins.forward_all4one(y1, y2, return_matrix=True)
         
         if bt_coef is None:
             bt_coef = self.barlowtwins_loss_coef
@@ -575,7 +603,7 @@ class MaskedAutoencoderViTBT(nn.Module):
 
             return mae_loss1, mae_loss2, bt_loss, c, bt_loss2, c2, pred1, pred2, mask1, mask2, latent1, latent2
         
-        return mae_loss1, mae_loss2, bt_loss, c, pred1, pred2, mask1, mask2, latent1, latent2
+        return mae_loss1, mae_loss2, bt_loss, c, on_diag, off_diag, pred1, pred2, mask1, mask2, latent1, latent2
         #return loss, pred, mask
 
 

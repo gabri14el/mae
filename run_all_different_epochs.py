@@ -3,7 +3,7 @@ import sys
 
 #models = ['base', 'small', 'tiny']
 models = ['base']
-models = ['coeffv2/0']
+models = ['alternative_bt_loss-0-1-augmentation']
 #ratios = [50, 60, 75]
 ratios = [.60]
 epochs = ['0', '99', '199', '500', '1000', '1500', '2000', '2500', '2999']
@@ -15,7 +15,7 @@ epochs = [str(x) for x in epochs]
 #batches = [80, 128, 160]
 batches = [192]
 
-experiment_name = 'bt_mae_coefv2'
+experiment_name = 'bt_mae_alternative-bt_augmentation'
 
 ratio = 0.6
 
@@ -110,5 +110,5 @@ for m, model in enumerate(models):
             --extra_test_dataset /media/gabriel/7739-DDF5/Gabriel/Datasets/2024/processed/compilado/ \
             --freeze_backbone"""
 
-        print(command)
-        os.system(command)
+        #print(command)
+        #os.system(command)

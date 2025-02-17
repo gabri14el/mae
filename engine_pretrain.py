@@ -127,7 +127,9 @@ def train_one_epoch_dual(model: torch.nn.Module,
         return_extras = {}
 
     projector_dim = int(args.projector.split('-')[-1])
-    accum_matrix = np.zeros((projector_dim, projector_dim))
+    accum_matrix = torch.tensor(np.zeros((projector_dim, projector_dim))).to(device)
+    accum_on = torch.tensor(0).to(device)
+    accum_off = torch.tensor(0).to(device)
     for data_iter_step, ((x1, x2), _) in enumerate(metric_logger.log_every(data_loader, print_freq, header)):
 
         # we use a per iteration (instead of per epoch) lr scheduler
@@ -138,9 +140,9 @@ def train_one_epoch_dual(model: torch.nn.Module,
         x2 = x2.to(device, non_blocking=True)
 
         with torch.cuda.amp.autocast():
-            mae_loss1, mae_loss2, bt_loss, c, pred1, pred2, mask1, mask2, latent1, latent2 = model(x1, x2, mask_ratio=args.mask_ratio, bt_coef=bt_coef)
+            mae_loss1, mae_loss2, bt_loss, c, on, off, pred1, pred2, mask1, mask2, latent1, latent2 = model(x1, x2, mask_ratio=args.mask_ratio, bt_coef=bt_coef, bt_mode=args.bt_mode)
             loss = mae_loss1 + mae_loss2 + bt_loss
-            #print('mae_loss1: {}, mae_loss2: {}, bt_loss: {}'.format(mae_loss1.item(), mae_loss2.item(), bt_loss.item()))
+            #print('mae_loss1: {}, mae_loss2: {}, bt_loss: {}, on:{}, off: {}'.format(mae_loss1.item(), mae_loss2.item(), bt_loss.item(), on.item(), off.item()))
 
         loss_value = loss.item()
 
@@ -174,13 +176,22 @@ def train_one_epoch_dual(model: torch.nn.Module,
             log_writer.add_scalar('train_loss', loss_value_reduce, epoch_1000x)
             log_writer.add_scalar('lr', lr, epoch_1000x)
         
-        accum_matrix = np.sum([accum_matrix, c.detach().cpu().numpy()], axis=0)
+        #accum_matrix = np.sum([accum_matrix, c.detach().cpu().numpy()], axis=0)
+        accum_matrix = torch.add(accum_matrix, c)
+        accum_on = torch.add(accum_on, on)
+        accum_off = torch.add(accum_off, off)
             
     
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()
     
-    accum_matrix = accum_matrix / (data_iter_step + 1)
+    accum_matrix = accum_matrix.detach().cpu().numpy() / (data_iter_step + 1)
+    accum_on = accum_on.detach().cpu().numpy() / (data_iter_step + 1)
+    accum_off = accum_off.detach().cpu().numpy() / (data_iter_step + 1)
+
+    metric_logger.update(bt_on_diag=accum_on)
+    metric_logger.update(bt_off_diag=accum_off)
+
     return_extras['accum_matrix'] = {'value':accum_matrix, 'type':'txt'}
 
     
@@ -193,6 +204,7 @@ def train_one_epoch_dual(model: torch.nn.Module,
         #print('KNN evaluation: f1: {}, accuracy: {}'.format(f1, accuracy))
         metric_logger.update(knn_f1_val=f1)
         metric_logger.update(knn_accuracy_val=accuracy)
+        
 
         #if True:
         if (epoch+1) % 100 == 0:
