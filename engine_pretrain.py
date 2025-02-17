@@ -107,10 +107,10 @@ def train_one_epoch_dual(model: torch.nn.Module,
     
     if args.bt_loss_coef_decay == 'exp':
         bt_coef = exp_scheduler(epoch, args.epochs) * args.bt_loss_coef
-        print('entred exp decay bt loss coef')
+        print('exp decay bt loss coef')
     elif args.bt_loss_coef_decay == 'cosine':
         bt_coef = cosine_scheduler(epoch, args.epochs) * args.bt_loss_coef
-        print('entred cosine decay bt loss coef')
+        print('cosine decay bt loss coef')
     else:
         bt_coef = args.bt_loss_coef
 
@@ -140,8 +140,8 @@ def train_one_epoch_dual(model: torch.nn.Module,
         x2 = x2.to(device, non_blocking=True)
 
         with torch.cuda.amp.autocast():
-            mae_loss1, mae_loss2, bt_loss, c, on, off, pred1, pred2, mask1, mask2, latent1, latent2 = model(x1, x2, mask_ratio=args.mask_ratio, bt_coef=bt_coef, bt_mode=args.bt_mode)
-            loss = mae_loss1 + mae_loss2 + bt_loss
+            mae_loss1, mae_loss2, bt_loss,c, bt_mixup_loss, on, off, pred1, pred2, mask1, mask2, latent1, latent2 = model(x1, x2, mask_ratio=args.mask_ratio, bt_coef=bt_coef, bt_mode=args.bt_mode, bt_mixup = args.bt_mixup, bt_mixup_loss_scale = args.bt_mixup_loss_scale)
+            loss = mae_loss1 + mae_loss2 + bt_loss + bt_mixup_loss
             #print('mae_loss1: {}, mae_loss2: {}, bt_loss: {}, on:{}, off: {}'.format(mae_loss1.item(), mae_loss2.item(), bt_loss.item(), on.item(), off.item()))
 
         loss_value = loss.item()
@@ -162,8 +162,9 @@ def train_one_epoch_dual(model: torch.nn.Module,
         metric_logger.update(mae_loss_1=mae_loss1.item())
         metric_logger.update(mae_loss_2=mae_loss2.item())
         metric_logger.update(bt_loss=bt_loss.item())
+        metric_logger.logger.update(bt_mixup_loss=bt_mixup_loss.item())
         metric_logger.update(bt_coef=bt_coef)
-
+        
         lr = optimizer.param_groups[0]["lr"]
         metric_logger.update(lr=lr)
 

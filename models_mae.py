@@ -18,6 +18,7 @@ from timm.models.vision_transformer import PatchEmbed, Block
 
 from util.pos_embed import get_2d_sincos_pos_embed
 from sklearn.neighbors import NearestNeighbors
+import numpy as np
 
 
 class MaskedAutoencoderViT(nn.Module):
@@ -564,7 +565,8 @@ class MaskedAutoencoderViTBT(nn.Module):
         return final_cls
 
 
-    def forward(self, x1, x2, mask_ratio=0.75, prev_iteractions=None, bt_coef=None, bt_mode='default'):
+    def forward(self, x1, x2, mask_ratio=0.75, prev_iteractions=None, bt_coef=None, bt_mode='default', bt_mixup = False, bt_mixup_loss_scale=1.0):
+        bt_function = self.barlow_twins if bt_mode == 'default' else self.barlow_twins.forward_all4one
         latent1, mask1, ids_restore1 = self.forward_encoder(x1, mask_ratio)
         latent2, mask2, ids_restore2 = self.forward_encoder(x2, mask_ratio)
         
@@ -582,10 +584,35 @@ class MaskedAutoencoderViTBT(nn.Module):
         else:
             bt_loss, c, on_diag, off_diag = self.barlow_twins.forward_all4one(y1, y2, return_matrix=True)
         
+        if bt_mixup:
+            index = torch.randperm(x1.shape[0]).cuda(non_blocking=True)
+            alpha = np.random.beta(1.0, 1.0)
+
+            x_mixed = alpha * x1 + (1 - alpha) * x2[index, :]
+            latent_mixed, _, _ = self.forward_encoder(x2, mask_ratio)
+            y_mixed = latent_mixed[:, 0, :]
+
+            
+            
+            _, y_mixed_matrix1 = bt_function(y_mixed, y1, return_matrix=True)
+            _, y_mixed_matrix2 = bt_function(y_mixed, y2, return_matrix=True)
+
+            _, parcel1 = bt_function(y1, y1, return_matrix=True)
+            _, parcel2 = bt_function(y2[index,:], y1, return_matrix=True)
+            cc_mix1_gt = alpha*parcel1 + (1-alpha)*parcel2
+
+            _, parcel1 = bt_function(y1, y2, return_matrix=True)
+            _, parcel2 = bt_function(y2[index,:], y2, return_matrix=True)
+            cc_mix2_gt = alpha*parcel1 + (1-alpha)*parcel2
+
+            bt_loss_mix = bt_mixup_loss_scale * self.barlow_twins.lambd * ((y_mixed_matrix1 - cc_mix1_gt).pow(2).sum() + (y_mixed_matrix2 - cc_mix2_gt).pow(2).sum())
+
+        else:
+            bt_loss_mix = torch.zeros(1).cuda()
         if bt_coef is None:
             bt_coef = self.barlowtwins_loss_coef
          
-        bt_loss = bt_coef * bt_loss
+        bt_loss = bt_coef * (bt_loss)
 
         if prev_iteractions is not None:
             nn = torch.zeros_like(y1).to(x1.device)
@@ -601,9 +628,9 @@ class MaskedAutoencoderViTBT(nn.Module):
 
             bt_loss2, c2 = bt_coef* self.barlow_twins(y1, nn)
 
-            return mae_loss1, mae_loss2, bt_loss, c, bt_loss2, c2, pred1, pred2, mask1, mask2, latent1, latent2
+            return mae_loss1, mae_loss2, bt_loss, c, bt_loss_mix, bt_loss2, c2, pred1, pred2, mask1, mask2, latent1, latent2
         
-        return mae_loss1, mae_loss2, bt_loss, c, on_diag, off_diag, pred1, pred2, mask1, mask2, latent1, latent2
+        return mae_loss1, mae_loss2, bt_loss, c, bt_loss_mix, on_diag, off_diag, pred1, pred2, mask1, mask2, latent1, latent2
         #return loss, pred, mask
 
 
