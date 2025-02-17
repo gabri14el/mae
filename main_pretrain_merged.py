@@ -113,7 +113,7 @@ def get_args_parser():
     parser.add_argument('--bt_loss_coef_decay', default=None, choices=['cosine', 'exp'], type=str)
     parser.add_argument('--bt_mode', default='default', choices=['default', 'all4one'], type=str)
     parser.add_argument('--bt_mixup', action='store_true', default=False)
-    parser.add_argument('--bt_mixup_bt_mixup_loss_scale', default=1.0, type=float)
+    parser.add_argument('--bt_mixup_loss_scale', default=1.0, type=float)
 
 
     #knn evaluation
