@@ -565,7 +565,7 @@ class MaskedAutoencoderViTBT(nn.Module):
         return final_cls
 
 
-    def forward(self, x1, x2, mask_ratio=0.75, prev_iteractions=None, bt_coef=None, bt_mode='default', bt_mixup = False, bt_mixup_loss_scale=1.0):
+    def forward(self, x1, x2, mask_ratio=0.75, prev_iteractions=None, bt_coef=None, bt_mode='default', bt_mixup = False, bt_mixup_loss_scale=1.0, bt_global_pooling=False):
         bt_function = self.barlow_twins if bt_mode == 'default' else self.barlow_twins.forward_all4one
         latent1, mask1, ids_restore1 = self.forward_encoder(x1, mask_ratio)
         latent2, mask2, ids_restore2 = self.forward_encoder(x2, mask_ratio)
@@ -577,8 +577,14 @@ class MaskedAutoencoderViTBT(nn.Module):
         mae_loss2 = self.forward_loss(x2, pred2, mask2)
 
         #get the class token for y1 and y2
-        y1 = latent1[:, 0, :]
-        y2 = latent2[:, 0, :]
+        if bt_global_pooling:
+            y1 = latent1[:, 1:, :].mean(dim=1)  # global pool without cls token
+            y2 = latent2[:, 1:, :].mean(dim=1)
+        else:
+            y1 = latent1[:, 0, :]
+            y2 = latent2[:, 0, :]
+        
+        
         if bt_mode == 'default':
             bt_loss, c, on_diag, off_diag = self.barlow_twins(y1, y2, return_matrix=True)
         else:

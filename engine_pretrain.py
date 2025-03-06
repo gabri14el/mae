@@ -97,6 +97,7 @@ def train_one_epoch_dual(model: torch.nn.Module,
                     args=None,
                     data_loader_eval_train=None,
                     data_loader_eval_val=None,
+                    queue=None,
                     global_rank=0):
     model.train(True)
     metric_logger = misc.MetricLogger(delimiter="  ")
@@ -114,8 +115,13 @@ def train_one_epoch_dual(model: torch.nn.Module,
     else:
         bt_coef = args.bt_loss_coef
 
-    
-    
+    if queue is None and args.bt_nn:
+        queue = torch.rand((args.bt_nn_queue_size, model.patch_embed.proj.out_channels)).to(args.device)
+        new_queue = torch.zeros((args.bt_nn_queue_size, model.patch_embed.proj.out_channels)).to(args.device)
+    elif args.bt_nn:
+        new_queue = torch.zeros((args.bt_nn_queue_size, model.patch_embed.proj.out_channels)).to(args.device)
+    else:
+        new_queue = None
 
     accum_iter = args.accum_iter
 
@@ -140,9 +146,17 @@ def train_one_epoch_dual(model: torch.nn.Module,
         x2 = x2.to(device, non_blocking=True)
 
         with torch.cuda.amp.autocast():
-            mae_loss1, mae_loss2, bt_loss,c, bt_mixup_loss, on, off, pred1, pred2, mask1, mask2, latent1, latent2 = model(x1, x2, mask_ratio=args.mask_ratio, bt_coef=bt_coef, bt_mode=args.bt_mode, bt_mixup = args.bt_mixup, bt_mixup_loss_scale = args.bt_mixup_loss_scale)
+            mae_loss1, mae_loss2, bt_loss,c, bt_mixup_loss, on, off, pred1, pred2, mask1, mask2, latent1, latent2 = model(x1, x2, mask_ratio=args.mask_ratio, bt_coef=bt_coef, bt_mode=args.bt_mode, bt_mixup = args.bt_mixup, bt_mixup_loss_scale = args.bt_mixup_loss_scale, bt_global_pooling=args.bt_global_pooling, prev_iteractions=queue)
             loss = mae_loss1 + mae_loss2 + bt_loss + bt_mixup_loss
             #print('mae_loss1: {}, mae_loss2: {}, bt_loss: {}, on:{}, off: {}'.format(mae_loss1.item(), mae_loss2.item(), bt_loss.item(), on.item(), off.item()))
+
+        #edited latent space
+        latent2_e = None
+        if args.bt_nn and args.bt_global_pooling:
+            latent2_e = latent2[:, 1:, :].mean(dim=1)
+        elif args.bt_nn and not args.bt_global_pooling:
+            latent2_e = latent2[:, 0, :]
+        
 
         loss_value = loss.item()
 
@@ -181,6 +195,10 @@ def train_one_epoch_dual(model: torch.nn.Module,
         accum_matrix = torch.add(accum_matrix, c)
         accum_on = torch.add(accum_on, on)
         accum_off = torch.add(accum_off, off)
+
+        
+        if(data_iter_step >= (len(data_loader) - (args.bt_nn_queue_size/args.batch_size))) and(not latent2_e is None):
+            new_queue = torch.cat((new_queue[args.batch_size:], latent2_e))
             
     
     # gather the stats from all processes
@@ -221,7 +239,7 @@ def train_one_epoch_dual(model: torch.nn.Module,
 
     print("Averaged stats:", metric_logger)
 
-    return {k: meter.global_avg for k, meter in metric_logger.meters.items()}, return_extras
+    return {k: meter.global_avg for k, meter in metric_logger.meters.items()}, return_extras, new_queue
 
 
 def extract_features(model: torch.nn.Module, data_loader: Iterable, device: torch.device):

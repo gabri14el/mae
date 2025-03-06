@@ -2,8 +2,8 @@ import os
 import sys
 
 #models = ['base', 'small', 'tiny']
-models = ['base']
-models = ['alternative_bt_loss-0-1-augmentation']
+models = ['']
+models = ['classic_bt_loss-0-1-augmentation-mixup']
 #ratios = [50, 60, 75]
 ratios = [.60]
 epochs = ['0', '99', '199', '500', '1000', '1500', '2000', '2500', '2999']
@@ -15,7 +15,7 @@ epochs = [str(x) for x in epochs]
 #batches = [80, 128, 160]
 batches = [192]
 
-experiment_name = 'bt_mae_alternative-bt_augmentation'
+experiment_name = 'bt_mae_mixup'
 
 ratio = 0.6
 

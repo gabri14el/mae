@@ -113,7 +113,11 @@ def get_args_parser():
     parser.add_argument('--bt_loss_coef_decay', default=None, choices=['cosine', 'exp'], type=str)
     parser.add_argument('--bt_mode', default='default', choices=['default', 'all4one'], type=str)
     parser.add_argument('--bt_mixup', action='store_true', default=False)
-    parser.add_argument('--bt_mixup_loss_scale', default=1.0, type=float)
+    parser.add_argument('--bt_mixup_loss_scale', default=0.001, type=float)
+    parser.add_argument('--bt_global_pooling', action='store_true', default=False)
+    parser.add_argument('--bt_nn', action='store_true', default=False)
+    parser.add_argument('--bt_nn_queue_size', default=512, type=float, metavar='L',
+                    help='size the queue')
 
 
     #knn evaluation
@@ -333,19 +337,25 @@ def main(args):
     print(f"Start training for {args.epochs} epochs")
     start_time = time.time()
     better_loss = np.inf
+
+    queue = None
+    if args.bt_nn == True:
+        assert args.bt_nn_queue_size % args.batch_size == 0
+        #queue = torch.rand((args.bt_nn_queue_size, model.patch_embed.proj.out_channels))
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed:
             data_loader_train.sampler.set_epoch(epoch)
-        train_stats, extras = train_one_epoch_dual(
+        train_stats, extras, queue = train_one_epoch_dual(
             model, data_loader_train,
             optimizer, device, epoch, loss_scaler,
             log_writer=log_writer,
             args=args,
             data_loader_eval_train=data_loader_eval_train,
             data_loader_eval_val=data_loader_eval_validation,
+            queue=queue,
             global_rank=global_rank
         )
-        if args.output_dir and (epoch % 500 == 0 or epoch + 1 == args.epochs or epoch in [99, 199, 399, 499, 699, 899]):
+        if args.output_dir and (epoch % 500 == 0 or epoch + 1 == args.epochs or epoch in [99, 199, 399, 499, 599, 699, 799, 899, 999]):
             misc.save_model(
                 args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
                 loss_scaler=loss_scaler, epoch=epoch)
